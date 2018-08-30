@@ -349,7 +349,8 @@
     }
     return arr;
   }
-
+  
+  // 应用变更
   function applyChange(target, source, change) {
     if (typeof change === 'undefined' && source && ~validKinds.indexOf(source.kind)) {
       change = source;
@@ -456,7 +457,8 @@
       }
     }
   }
-
+  
+  // 让target编程source一样的对象。相当于clone
   function applyDiff(target, source, filter) {
     if (target && source) {
       var onChange = function (change) {
