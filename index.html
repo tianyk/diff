@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>Document</title>
+</head>
+
+<body>
+    <div id="app">
+        {{ message }} {{ name }}
+        <span v-if="address">{{address}}</span>
+        <span v-if="user.name">[{{user.name}} {{user.age}}]</span>
+        <span v-if="user.friend">{{user.friend.name}}</span>
+        <span v-for="item in school">{{item}}</span>
+    </div>
+    <script src="http://lib.baomitu.com/deep-diff/0.3.3/deep-diff.min.js"></script>
+    <!-- <script src="http://lib.baomitu.com/lodash.js/4.17.10/lodash.core.js"></script> -->
+    <!-- <script src="./vue.js"></script> -->
+    <script src="http://lib.baomitu.com/vue/2.5.17/vue.js"></script>
+    <script>
+
+        function applyChange(target, change) {
+            if (target && change && change.kind) {
+                var it = target,
+                    i = -1,
+                    last = change.path ? change.path.length - 1 : 0,
+                    key;
+
+                // for (var i = 0; i < last; i++) {
+                //     key = change.path[i];
+                //     if (typeof it[key] === 'undefined') {
+                //         // 根据下一个key的类型是数组还是对象
+                //         Vue.set(it, key, (typeof change.path[i + 1] !== 'undefined' && typeof change.path[i + 1] === 'number') ? [] : {})
+                //     }
+                    
+                //     // a.b.c it = b
+                //     // 遍历找到真正要修改的子对象
+                //     it = it[key];
+                // }
+
+                while (++i < last) {
+                    if (typeof it[change.path[i]] === 'undefined') {
+                        // it[change.path[i]] = (typeof change.path[i + 1] !== 'undefined' && typeof change.path[i + 1] === 'number') ? [] : {};
+                        Vue.set(it, change.path[i], (typeof change.path[i + 1] !== 'undefined' && typeof change.path[i + 1] === 'number') ? [] : {})
+                    }
+                    // 遍历找到真正要修改的子对象
+                    it = it[change.path[i]];
+                }
+                
+                switch (change.kind) {
+                    case 'A': // 数组
+                        // change.path[i] 此时的i为++后的
+                        if (change.path && typeof it[change.path[i]] === 'undefined') {
+                            // it[change.path[i]] = [];
+                            Vue.set(it, change.path[i], []);
+                        }
+                        applyArrayChange(change.path ? it[change.path[i]] : it, change.index, change.item);
+                        break;
+                    case 'D': // 删除元素
+                        Vue.delete(it, change.path[i]);
+                        break;
+                    case 'E': // 修改元素
+                    case 'N': // 新增元素
+                        Vue.set(it, change.path[i], change.rhs);
+                        break;
+                }
+            }
+        }
+
+        function applyArrayChange(arr, index, change) {
+            if (change.path && change.path.length) {
+                var it = arr[index],
+                    i, 
+                    u = change.path.length - 1;
+                for (i = 0; i < u; i++) {
+                    it = it[change.path[i]];
+                }
+                switch (change.kind) {
+                    case 'A':
+                        applyArrayChange(it[change.path[i]], change.index, change.item);
+                        break;
+                    case 'D':
+                        // delete it[change.path[i]];
+                        Vue.delete(it, change.path[i]);
+                        break;
+                    case 'E':
+                    case 'N':
+                        // it[change.path[i]] = change.rhs;
+                        Vue.set(it, change.path[i], change.rhs);
+                        break;
+                }
+            } else {
+                switch (change.kind) {
+                    case 'A':
+                        applyArrayChange(arr[index], change.index, change.item);
+                        break;
+                    case 'D':
+                        arr = arrayRemove(arr, index);
+                        break;
+                    case 'E':
+                    case 'N':
+                        // arr[index] = change.rhs;
+                        Vue.set(arr, index, change.rhs)
+                        break;
+                }
+            }
+            return arr;
+        }
+
+        function arrayRemove(arr, from, to) {
+            var rest = arr.slice((to || from) + 1 || arr.length);
+            arr.length = from < 0 ? arr.length + from : from;
+            arr.push.apply(arr, rest);
+            return arr;
+        }
+
+        var MyPlugin = {
+            clone: function (source) {
+                return JSON.parse(JSON.stringify(source));
+            },
+
+            log: function (val) {
+                console.log(JSON.stringify(val, null, 2));
+            },
+
+            diff: function () {
+                var args = Array.prototype.slice.call(arguments);
+                return DeepDiff.apply(null, args);
+            }
+        };
+
+        MyPlugin.install = function (Vue, options) {
+            var $DATA;
+
+            Vue.clone = this.clone;
+            Vue.log = this.log;
+            Vue.diff = this.diff;
+            Vue.applyChange = applyChange;
+
+            Vue.prototype.$clone = this.clone;
+            Vue.prototype.$log = this.log;
+            Vue.prototype.$diff = this.diff;
+
+            Vue.mixin({
+                created: function () {
+                    $DATA = Vue.clone(this.$data);
+                },
+                updated: function () {
+                    this.$nextTick(function () {
+                        var oldData = $DATA;
+                        var newData = Vue.clone(this.$data);
+                        $DATA = newData;
+
+                        var differences = Vue.diff(oldData, newData);
+                        // Vue.log(differences);
+                    })
+                },
+            })
+        }
+        Vue.use(MyPlugin);
+
+        var app = new Vue({
+            el: '#app',
+            data: {
+                message: 'Hello Vue!',
+                name: 'Ming',
+                age: 10,
+                address: '',
+                user: {},
+                school: []
+            }
+        });
+
+        let start = 500;
+        var diff = [
+            {
+                "kind": "E",
+                "path": [
+                    "message"
+                ],
+                "lhs": "Hello Vue!",
+                "rhs": "Hi Vue!"
+            },
+            {
+                "kind": "E",
+                "path": [
+                    "address"
+                ],
+                "lhs": "",
+                "rhs": "BeiJing"
+            },
+            {
+                "kind": "E",
+                "path": [
+                    "address"
+                ],
+                "lhs": "BeiJing",
+                "rhs": "NanJing"
+            },
+            {
+                "kind": "N",
+                "path": [
+                    "user",
+                    "name"
+                ],
+                "rhs": "LiMing"
+            },
+            {
+                "kind": "E",
+                "path": [
+                    "user",
+                    "name"
+                ],
+                "lhs": "LiMing",
+                "rhs": "LeeMing"
+            },
+            {
+                "kind": "A",
+                "path": [
+                    "school"
+                ],
+                "index": 0,
+                "item": {
+                    "kind": "N",
+                    "rhs": "小学"
+                }
+            },
+            {
+                "kind": "A",
+                "path": [
+                    "school"
+                ],
+                "index": 1,
+                "item": {
+                    "kind": "N",
+                    "rhs": null
+                }
+            },
+            {
+                "kind": "A",
+                "path": [
+                    "school"
+                ],
+                "index": 2,
+                "item": {
+                    "kind": "N",
+                    "rhs": "大学"
+                }
+            },
+            {
+                "kind": "E",
+                "path": [
+                    "school",
+                    1
+                ],
+                "lhs": null,
+                "rhs": "高中"
+            },
+            {
+                "kind": "E",
+                "path": [
+                    "school",
+                    2
+                ],
+                "lhs": "大学",
+                "rhs": "研究生"
+            },
+            {
+                "kind": "D",
+                "path": [
+                    "user",
+                    "name"
+                ],
+                "lhs": "LeeMing"
+            }
+        ];
+
+        for (let i = 0; i < diff.length; i++) {
+            setTimeout(() => {
+                Vue.applyChange(app.$data, diff[i]);
+            }, start += 500);
+        }
+
+        // setTimeout(() => {
+        //     app.message = "Hi Vue!";
+        // }, start += 500);
+
+        // setTimeout(() => {
+        //     Vue.set(app, 'address', 'BeiJing')
+        // }, start += 500);
+
+        // setTimeout(() => {
+        //     Vue.set(app, 'address', 'NanJing')
+        // }, start += 500);
+
+        // setTimeout(() => {
+        //     Vue.set(app.user, 'name', 'LiMing')
+        // }, start += 500);
+
+        // setTimeout(() => {
+        //     app.user.name = 'LeeMing';
+        // }, start += 500);
+
+        // setTimeout(() => {
+        //     app.school.push('小学')
+        // }, start += 500);
+
+        // setTimeout(() => {
+        //     Vue.set(app.school, 2, '大学')
+        // }, start += 500);
+
+        // setTimeout(() => {
+        //     Vue.set(app.school, 1, '高中')
+        // }, start += 500);
+
+        // setTimeout(() => {
+        //     Vue.set(app.school, 2, '研究生')
+        // }, start += 500);
+
+        // setTimeout(() => {
+        //     Vue.delete(app.user, 'name');
+        // }, start += 500);
+    </script>
+</body>
+
+</html>

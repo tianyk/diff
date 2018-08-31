@@ -1,28 +1,30 @@
-;(function(root, factory) { // eslint-disable-line no-extra-semi
+; (function (root, factory) { // eslint-disable-line no-extra-semi
   var deepDiff = factory(root);
   // eslint-disable-next-line no-undef
   if (typeof define === 'function' && define.amd) {
-      // AMD
-      define('DeepDiff', function() { // eslint-disable-line no-undef
-          return deepDiff;
-      });
+    // AMD
+    define('DeepDiff', function () { // eslint-disable-line no-undef
+      return deepDiff;
+    });
   } else if (typeof exports === 'object' || typeof navigator === 'object' && navigator.product.match(/ReactNative/i)) {
-      // Node.js or ReactNative
-      module.exports = deepDiff;
+    // Node.js or ReactNative
+    module.exports = deepDiff;
   } else {
-      // Browser globals
-      var _deepdiff = root.DeepDiff;
-      deepDiff.noConflict = function() {
-          if (root.DeepDiff === deepDiff) {
-              root.DeepDiff = _deepdiff;
-          }
-          return deepDiff;
-      };
-      root.DeepDiff = deepDiff;
+    // Browser globals
+    var _deepdiff = root.DeepDiff;
+    deepDiff.noConflict = function () {
+      if (root.DeepDiff === deepDiff) {
+        root.DeepDiff = _deepdiff;
+      }
+      return deepDiff;
+    };
+    root.DeepDiff = deepDiff;
   }
-}(this, function(root) {
+}(this, function (root) {
   var validKinds = ['N', 'E', 'A', 'D'];
+  var toString = Object.prototype.toString;
 
+  // 继承实现
   // nodejs compatible on server side and in the browser.
   function inherits(ctor, superCtor) {
     ctor.super_ = superCtor;
@@ -36,6 +38,7 @@
     });
   }
 
+  // Diff基类
   function Diff(kind, path) {
     Object.defineProperty(this, 'kind', {
       value: kind,
@@ -49,7 +52,15 @@
     }
   }
 
+  // 更新
+  // {
+  //   kind: 'E',
+  //   path: Array,
+  //   lhs: Object,
+  //   rhs: Object
+  // }
   function DiffEdit(path, origin, value) {
+    // kind = E 
     DiffEdit.super_.call(this, 'E', path);
     Object.defineProperty(this, 'lhs', {
       value: origin,
@@ -62,6 +73,12 @@
   }
   inherits(DiffEdit, Diff);
 
+  // 新增
+  // {
+  //   kind: 'N',
+  //   path: Array,
+  //   rhs: Object
+  // }
   function DiffNew(path, value) {
     DiffNew.super_.call(this, 'N', path);
     Object.defineProperty(this, 'rhs', {
@@ -71,6 +88,12 @@
   }
   inherits(DiffNew, Diff);
 
+  // 删除
+  // {
+  //   kind: 'D',
+  //   path: Array,
+  //   lhs: Object
+  // }
   function DiffDeleted(path, value) {
     DiffDeleted.super_.call(this, 'D', path);
     Object.defineProperty(this, 'lhs', {
@@ -80,6 +103,13 @@
   }
   inherits(DiffDeleted, Diff);
 
+  // 数组
+  // {
+  //   kind: 'A',
+  //   path: Array,
+  //   index: Number,
+  //   item: { Object | Diff }
+  // }
   function DiffArray(path, index, item) {
     DiffArray.super_.call(this, 'A', path);
     Object.defineProperty(this, 'index', {
@@ -93,33 +123,53 @@
   }
   inherits(DiffArray, Diff);
 
+  
+  /**
+   *
+   *
+   * @param {*} arr 
+   * @param {*} from 开始索引（包括）
+   * @param {*} to 结束索引（不包括）
+   * @returns
+   */
   function arrayRemove(arr, from, to) {
-    var rest = arr.slice((to || from) + 1 || arr.length);
-    arr.length = from < 0 ? arr.length + from : from;
-    arr.push.apply(arr, rest);
+    // var rest = arr.slice((to || from) + 1 || arr.length);
+    // arr.length = from < 0 ? arr.length + from : from;
+    // arr.push.apply(arr, rest);
+    // return arr;
+    var len = to ? to - from : 1;
+    arr.splice(from, len);
     return arr;
   }
 
+  // 算类型
   function realTypeOf(subject) {
-    var type = typeof subject;
-    if (type !== 'object') {
-      return type;
-    }
+    var type = Object.prototype.toString.call(subject);
+    var match = type.match(/^\[object\s([a-zA-Z]+)\]$/);
+    if (!match) return 'object'; 
 
-    if (subject === Math) {
-      return 'math';
-    } else if (subject === null) {
-      return 'null';
-    } else if (Array.isArray(subject)) {
-      return 'array';
-    } else if (Object.prototype.toString.call(subject) === '[object Date]') {
-      return 'date';
-    } else if (typeof subject.toString === 'function' && /^\/.*\//.test(subject.toString())) {
-      return 'regexp';
-    }
-    return 'object';
+    return match[1].toLowerCase();
+
+    // var type = typeof subject;
+    // if (type !== 'object') {
+    //   return type;
+    // }
+
+    // if (subject === Math) {
+    //   return 'math';
+    // } else if (subject === null) {
+    //   return 'null';
+    // } else if (Array.isArray(subject)) {
+    //   return 'array';
+    // } else if (Object.prototype.toString.call(subject) === '[object Date]') {
+    //   return 'date';
+    // } else if (typeof subject.toString === 'function' && /^\/.*\//.test(subject.toString())) {
+    //   return 'regexp';
+    // }
+    // return 'object';
   }
 
+  // 算字符串hash值
   // http://werxltd.com/wp/2010/05/13/javascript-implementation-of-javas-string-hashcode-method/
   function hashThisString(string) {
     var hash = 0;
@@ -132,12 +182,14 @@
     return hash;
   }
 
+  // 算对象的hash值
   // Gets a hash of the given object in an array order-independent fashion
   // also object key order independent (easier since they can be alphabetized)
   function getOrderIndependentHash(object) {
     var accum = 0;
     var type = realTypeOf(object);
 
+    // 对象和数组迭代计算
     if (type === 'array') {
       object.forEach(function (item) {
         // Addition is commutative so this is order indep
@@ -327,10 +379,12 @@
           break;
         case 'D':
           delete it[change.path[i]];
+          // Vue.delete(it, change.path[i]);
           break;
         case 'E':
         case 'N':
           it[change.path[i]] = change.rhs;
+          // Vue.set(it, change.path[i]) = change.rhs;
           break;
       }
     } else {
@@ -344,40 +398,63 @@
         case 'E':
         case 'N':
           arr[index] = change.rhs;
+          // Vue.set(arr, index, change.rhs)
           break;
       }
     }
     return arr;
   }
-  
+
   // 应用变更
   function applyChange(target, source, change) {
     if (typeof change === 'undefined' && source && ~validKinds.indexOf(source.kind)) {
       change = source;
     }
+    var originTarget = target, originChnage = change, originSource = source;
     if (target && change && change.kind) {
       var it = target,
-        i = -1,
+        // i = -1,
+        i,
         last = change.path ? change.path.length - 1 : 0;
-      while (++i < last) {
-        if (typeof it[change.path[i]] === 'undefined') {
+      // while (++i < last) {
+      //   if (typeof it[change.path[i]] === 'undefined') {
+      //     it[change.path[i]] = (typeof change.path[i + 1] !== 'undefined' && typeof change.path[i + 1] === 'number') ? [] : {};
+      //     // Vue.set(it, change.path[i], (typeof change.path[i + 1] !== 'undefined' && typeof change.path[i + 1] === 'number') ? [] : {})
+      //   }
+      //   // 遍历找到真正要修改的子对象
+      //   it = it[change.path[i]];
+      // }
+      var key;
+      for (i = 0; i < last; i++) {
+        key = change.path[i];
+        if (typeof it[key] === 'undefined') {
+          console.log('-------------------', {key, originTarget, originSource, originChnage})
+          // 根据下一个key的类型是数组还是对象
           it[change.path[i]] = (typeof change.path[i + 1] !== 'undefined' && typeof change.path[i + 1] === 'number') ? [] : {};
+          // Vue.set(it, key, (typeof change.path[i + 1] !== 'undefined' && typeof change.path[i + 1] === 'number') ? [] : {})
         }
-        it = it[change.path[i]];
+
+        // a.b.c it = b
+        // 遍历找到真正要修改的子对象
+        it = it[key];
       }
       switch (change.kind) {
         case 'A':
           if (change.path && typeof it[change.path[i]] === 'undefined') {
             it[change.path[i]] = [];
+            console.log('hahaaaaaaaaaaaaaaaaaaaaaaa',  {key, nextKey: change.path[i], originTarget, originSource, originChnage})
+            // Vue.set(it, change.path[i], []);
           }
           applyArrayChange(change.path ? it[change.path[i]] : it, change.index, change.item);
           break;
         case 'D':
           delete it[change.path[i]];
+          // Vue.delete(it, change.path[i]);
           break;
         case 'E':
         case 'N':
           it[change.path[i]] = change.rhs;
+          // Vue.set(it, change.path[i], change.rhs);
           break;
       }
     }
@@ -457,7 +534,7 @@
       }
     }
   }
-  
+
   // 让target编程source一样的对象。相当于clone
   function applyDiff(target, source, filter) {
     if (target && source) {

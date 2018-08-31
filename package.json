@@ -49,7 +49,7 @@
     "clean": "rimraf dist && mkdir dist",
     "preversion": "npm run release",
     "postversion": "git push && git push --tags",
-    "pretest": "npm run lint",
+    "pretest": "",
     "test": "mocha test/**/*.js",
     "test:watch": "nodemon --ext js,json --ignore dist/ --exec 'npm test'",
     "preci": "npm run lint",
